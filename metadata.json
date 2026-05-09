@@ -1,0 +1,6 @@
+{
+  "name": "Typing Keyboard Visualization",
+  "description": "An interactive keyboard typing animation built with React and p5.js.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
