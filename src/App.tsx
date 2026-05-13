@@ -36,6 +36,49 @@ export default function App() {
       let inputLock = false;
 
       let layout: any = {};
+      
+      let activeAchievement: any = null;
+      let lastTriggeredNormalized = "";
+
+      const achievements = [
+        { text: "ILOVEYOU", title: "情话一级选手" },
+        { text: "110", title: "守法热心市民" },
+        { text: "119", title: "火势还没来，你先呼叫上了？" },
+        { text: "120", title: "保命意识天花板" },
+        { text: "HELPME", title: "在线求助小哭包" },
+        { text: "CXY", title: "可以啊，这都被你找到了！" },
+        { text: "CAIXINYI", title: "实名打卡达人" },
+        { text: "GOODGOODSTUDYDAYDAYUP", title: "中式英语传承人" },
+        { text: "HELLO", title: "礼貌开场白选手" },
+        { text: "THANKYOU", title: "懂感恩模范选手" },
+        { text: "666", title: "民间捧场之王" },
+        { text: "233", title: "笑点超低，一笑就停不下来" },
+        { text: "OMG", title: "欧米茄，集美!" },
+        { text: "YES", title: "果断同意达人" },
+        { text: "NO", title: "高冷拒绝专业户" },
+        { text: "BYEBYE", title: "溜了溜了，优雅退场第一人" },
+        { text: "HHHH", title: "笑点沦陷显眼包" },
+        { text: "SORRY", title: "道歉超快老实人" },
+        { text: "GOGOGO", title: "gogogo,出发喽！" },
+        { text: "BIUBIU", title: "可爱发射小机枪" }
+      ];
+
+      function checkAchievements() {
+          let normalizedTarget = typedText.toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (normalizedTarget === lastTriggeredNormalized) return;
+          
+          for (let ach of achievements) {
+              if (normalizedTarget.endsWith(ach.text)) {
+                  activeAchievement = {
+                      title: ach.title,
+                      triggerTime: p.millis()
+                  };
+                  playSound('achievement');
+                  lastTriggeredNormalized = normalizedTarget;
+                  break;
+              }
+          }
+      }
 
       p.setup = () => {
         p.createCanvas(p.windowWidth, p.windowHeight);
@@ -83,6 +126,7 @@ export default function App() {
         drawSpaceBar();
         drawRefreshKey();
         drawRecordKey();
+        drawAchievement();
 
         if (p.millis() - activeTime > 150) {
           activeKey = null;
@@ -141,6 +185,22 @@ export default function App() {
       }
 
       function handleTouch(mx: number, my: number) {
+        if (activeAchievement && p.millis() - activeAchievement.triggerTime < 10000) {
+            let cx = activeAchievement.x;
+            let cy = activeAchievement.y;
+            let cw = activeAchievement.w;
+            let ch = activeAchievement.h;
+            if (
+                mx > cx - cw / 2 - 4 &&
+                mx < cx + cw / 2 + 4 &&
+                my > cy - ch / 2 - 4 &&
+                my < cy + ch / 2 + 4
+            ) {
+                activeAchievement = null;
+                return;
+            }
+        }
+
         // SPACE
         let sx = p.width / 2;
         let sy = layout.spaceY;
@@ -212,7 +272,7 @@ export default function App() {
         }
       }
 
-      function playSound(type: 'tap' | 'del' | 'enter' | 'refresh') {
+      function playSound(type: 'tap' | 'del' | 'enter' | 'refresh' | 'achievement') {
         if (!audioCtx) return;
         const t = audioCtx.currentTime;
         const osc = audioCtx.createOscillator();
@@ -252,6 +312,27 @@ export default function App() {
           gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
           osc.start(t);
           osc.stop(t + 0.2);
+        } else if (type === 'achievement') {
+          const osc2 = audioCtx.createOscillator();
+          osc2.connect(gain);
+          osc.type = 'square';
+          osc2.type = 'square';
+          osc.frequency.setValueAtTime(261.63, t); // C4
+          osc.frequency.setValueAtTime(329.63, t + 0.1); // E4
+          osc.frequency.setValueAtTime(392.00, t + 0.2); // G4
+          osc.frequency.setValueAtTime(523.25, t + 0.3); // C5
+          osc2.frequency.setValueAtTime(261.63 * 1.5, t);
+          osc2.frequency.setValueAtTime(329.63 * 1.5, t + 0.1);
+          osc2.frequency.setValueAtTime(392.00 * 1.5, t + 0.2);
+          osc2.frequency.setValueAtTime(523.25 * 1.5, t + 0.3);
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.1, t + 0.05);
+          gain.gain.setValueAtTime(0.1, t + 0.4);
+          gain.gain.linearRampToValueAtTime(0, t + 0.6);
+          osc.start(t);
+          osc.stop(t + 0.6);
+          osc2.start(t);
+          osc2.stop(t + 0.6);
         }
       }
 
@@ -332,6 +413,7 @@ export default function App() {
 
         playSound('tap');
         typedText += k;
+        checkAchievements();
       }
 
       p.keyPressed = () => {
@@ -472,16 +554,25 @@ export default function App() {
         keyPositions = {};
 
         p.textAlign(p.CENTER, p.CENTER);
+        
+        let timeSinceLastKey = p.millis() - lastKeyTime;
+        let idleFactor = p.constrain((timeSinceLastKey - 1000) / 1000.0, 0, 1);
 
         for (let r = 0; r < rows.length; r++) {
           let letters = rows[r];
           let rowWidth = (letters.length - 1) * spacing;
           let startX = p.width / 2 - rowWidth / 2;
-          let y = layout.keyboardTop + r * layout.rowSpacing;
+          let baseY = layout.keyboardTop + r * layout.rowSpacing;
 
           for (let i = 0; i < letters.length; i++) {
             let k = letters[i];
             let x = startX + i * spacing;
+
+            let idleY = 0;
+            if (idleFactor > 0) {
+              idleY = p.sin(p.millis() * 0.002 + r * 1.5 + i * 0.5) * (layout.circleSize * 0.15) * idleFactor;
+            }
+            let y = baseY + idleY;
 
             keyPositions[k] = { x, y };
 
@@ -515,8 +606,15 @@ export default function App() {
       }
 
       function drawSpaceBar() {
+        let timeSinceLastKey = p.millis() - lastKeyTime;
+        let idleFactor = p.constrain((timeSinceLastKey - 1000) / 1000.0, 0, 1);
+        let idleY = 0;
+        if (idleFactor > 0) {
+          idleY = p.sin(p.millis() * 0.002 + 5) * (layout.spaceHeight * 0.15) * idleFactor;
+        }
+
         let x = p.width / 2;
-        let y = layout.spaceY;
+        let y = layout.spaceY + idleY;
 
         let isActive = (activeKey === " " && p.millis() - activeTime < 150);
 
@@ -544,8 +642,15 @@ export default function App() {
       }
 
       function drawRefreshKey() {
+        let timeSinceLastKey = p.millis() - lastKeyTime;
+        let idleFactor = p.constrain((timeSinceLastKey - 1000) / 1000.0, 0, 1);
+        let idleY = 0;
+        if (idleFactor > 0) {
+          idleY = p.sin(p.millis() * 0.002 + 6) * (layout.spaceHeight * 0.15) * idleFactor;
+        }
+
         let x = layout.refreshX;
-        let y = layout.refreshY;
+        let y = layout.refreshY + idleY;
         let w = layout.actionBtnWidth;
         let h = layout.spaceHeight;
 
@@ -583,8 +688,15 @@ export default function App() {
       }
 
       function drawRecordKey() {
+        let timeSinceLastKey = p.millis() - lastKeyTime;
+        let idleFactor = p.constrain((timeSinceLastKey - 1000) / 1000.0, 0, 1);
+        let idleY = 0;
+        if (idleFactor > 0) {
+          idleY = p.sin(p.millis() * 0.002 + 7) * (layout.spaceHeight * 0.15) * idleFactor;
+        }
+
         let x = layout.recordX;
-        let y = layout.refreshY;
+        let y = layout.refreshY + idleY;
         let w = layout.actionBtnWidth;
         let h = layout.spaceHeight;
 
@@ -624,6 +736,62 @@ export default function App() {
 
         p.noStroke();
         p.text(textStr, x, y);
+      }
+
+      function drawAchievement() {
+        if (!activeAchievement) return;
+        let elapsed = p.millis() - activeAchievement.triggerTime;
+        if (elapsed > 10000) {
+            activeAchievement = null;
+            return;
+        }
+
+        let cardW = p.width * 0.8;
+        if (cardW > 800) cardW = 800; // max width
+        let cardH = 80;
+        let cardX = p.width / 2;
+        let cardY = p.height * 0.15; // top area
+        
+        let alpha = 255;
+        if (elapsed < 500) {
+            alpha = p.map(elapsed, 0, 500, 0, 255);
+        } else if (elapsed > 9500) {
+            alpha = p.map(elapsed, 9500, 10000, 255, 0);
+        }
+        
+        activeAchievement.x = cardX;
+        activeAchievement.y = cardY;
+        activeAchievement.w = cardW;
+        activeAchievement.h = cardH;
+
+        p.push();
+        p.rectMode(p.CENTER);
+        
+        // Pixel border effect
+        p.noStroke();
+        p.fill(0, alpha);
+        // Shadow/outer border
+        p.rect(cardX + 4, cardY + 4, cardW, cardH);
+        
+        p.fill(0, alpha);
+        p.rect(cardX, cardY, cardW + 8, cardH);
+        p.rect(cardX, cardY, cardW, cardH + 8);
+        
+        p.fill(255, alpha);
+        p.rect(cardX, cardY, cardW, cardH);
+        
+        p.fill(0, alpha);
+        p.textAlign(p.CENTER, p.CENTER);
+        
+        // Header
+        p.textSize(12);
+        p.text("恭喜触发成就", cardX, cardY - 20);
+        
+        // Title
+        p.textSize(20);
+        p.text(activeAchievement.title, cardX, cardY + 10);
+        
+        p.pop();
       }
 
       function drawConnections() {
